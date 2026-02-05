@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>四格方塊實驗</title>
+    <style>
+      :root {
+        --bg: #f0f2f5;
+        --cell-size: 40px;
+        --color-I: #00bcd4;
+        --color-T: #9c27b0;
+        --color-Z: #f44336;
+        --color-O: #ffeb3b;
+        --color-L: #ff9800;
+      }
+      body {
+        font-family: sans-serif;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+      .layout {
+        display: flex;
+        gap: 50px;
+        margin-top: 20px;
+        align-items: flex-start;
+      }
+
+      /* 棋盤樣式 */
+      .grid {
+        display: grid;
+        background: #ccc;
+        gap: 1px;
+        border: 2px solid #333;
+        padding: 1px;
+      }
+      .cell {
+        width: var(--cell-size);
+        height: var(--cell-size);
+        background: white;
+        pointer-events: auto;
+      }
+      .cell.occupied {
+        border: none;
+      }
+
+      /* 預覽陰影樣式 */
+      .cell.preview {
+        opacity: 0.5 !important;
+      }
+
+      .toolbar {
+        background: white;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+      .shape-slot {
+        margin-bottom: 30px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .shape-preview {
+        display: grid;
+        gap: 1px;
+        cursor: grab;
+        padding: 0;
+        border: 2px solid transparent;
+      }
+      .shape-preview:hover {
+        border-color: #ddd;
+      }
+      .mini-cell {
+        width: var(--cell-size);
+        height: var(--cell-size);
+      }
+
+      .info-panel {
+        min-width: 60px;
+        text-align: center;
+      }
+      .count-badge {
+        font-weight: bold;
+        font-size: 1.5em;
+        display: block;
+      }
+
+      .btn-group {
+        margin-bottom: 20px;
+      }
+      button {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        background: white;
+      }
+      button.active {
+        background: #333;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>四格方塊實驗</h1>
+
+    <div class="btn-group">
+      <button onclick="changeSize(6)">6 x 6</button>
+      <button onclick="changeSize(7)">7 x 7</button>
+      <button onclick="changeSize(8)">8 x 8</button>
+      <button onclick="changeSize(9)" class="active">9 x 9</button>
+      <button onclick="location.reload()" style="color: red; margin-left: 20px">
+        重設
+      </button>
+    </div>
+
+    <div class="layout">
+      <div class="toolbar">
+        <div id="inventory"></div>
+        <p style="font-size: 0.8em; color: #888">* 點擊旋轉 / 拖移放置</p>
+      </div>
+      <div id="grid" class="grid"></div>
+    </div>
+
+    <script>
+      const SHAPES = {
+        I: {
+          color: "var(--color-I)",
+          count: 3,
+          cells: [
+            [0, 0],
+            [0, 1],
+            [0, 2],
+            [0, 3],
+          ],
+        },
+        T: {
+          color: "var(--color-T)",
+          count: 6,
+          cells: [
+            [1, 0],
+            [0, 1],
+            [1, 1],
+            [1, 2],
+          ],
+        },
+        Z: {
+          color: "var(--color-Z)",
+          count: 4,
+          cells: [
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 2],
+          ],
+        },
+        O: {
+          color: "var(--color-O)",
+          count: 4,
+          cells: [
+            [0, 0],
+            [0, 1],
+            [1, 0],
+            [1, 1],
+          ],
+        },
+        L: {
+          color: "var(--color-L)",
+          count: 4,
+          cells: [
+            [0, 0],
+            [1, 0],
+            [2, 0],
+            [2, 1],
+          ],
+        },
+      };
+
+      let currentSize = 9;
+      let draggedType = null;
+      let lastPreviewIndices = [];
+
+      function initInventory() {
+        const container = document.getElementById("inventory");
+        container.innerHTML = "";
+        for (let type in SHAPES) {
+          const item = SHAPES[type];
+          const div = document.createElement("div");
+          div.className = "shape-slot";
+          div.innerHTML = `
+                    <div class="info-panel"><span class="count-badge" id="count-${type}">${item.count}</span></div>
+                    <div id="preview-${type}" class="shape-preview" draggable="true" 
+                         onclick="rotateShape('${type}')" ondragstart="handleDragStart(event, '${type}')">
+                         ${renderShape(type)}
+                    </div>
+                `;
+          container.appendChild(div);
+        }
+      }
+
+      function renderShape(type) {
+        const cells = SHAPES[type].cells;
+        const maxR = Math.max(...cells.map((c) => c[0])) + 1;
+        const maxC = Math.max(...cells.map((c) => c[1])) + 1;
+        let html = `<div style="display:grid; grid-template-columns:repeat(${maxC}, var(--cell-size)); gap:1px; background:#eee;">`;
+        for (let r = 0; r < maxR; r++) {
+          for (let c = 0; c < maxC; c++) {
+            const isPart = cells.some((cell) => cell[0] === r && cell[1] === c);
+            html += `<div class="mini-cell" style="background:${isPart ? SHAPES[type].color : "transparent"}"></div>`;
+          }
+        }
+        return html + `</div>`;
+      }
+
+      function rotateShape(type) {
+        SHAPES[type].cells = SHAPES[type].cells.map((c) => [c[1], -c[0]]);
+        const minR = Math.min(...SHAPES[type].cells.map((c) => c[0]));
+        const minC = Math.min(...SHAPES[type].cells.map((c) => c[1]));
+        SHAPES[type].cells = SHAPES[type].cells.map((c) => [
+          c[0] - minR,
+          c[1] - minC,
+        ]);
+        document.getElementById(`preview-${type}`).innerHTML =
+          renderShape(type);
+      }
+
+      function handleDragStart(e, type) {
+        if (SHAPES[type].count <= 0) {
+          e.preventDefault();
+          return;
+        }
+        draggedType = type;
+        // 設定透明預覽圖（選配，可自訂）
+        const img = new Image();
+        img.src =
+          "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        e.dataTransfer.setDragImage(img, 0, 0);
+      }
+
+      function renderGrid() {
+        const grid = document.getElementById("grid");
+        grid.style.gridTemplateColumns = `repeat(${currentSize}, var(--cell-size))`;
+        grid.innerHTML = "";
+        for (let i = 0; i < currentSize * currentSize; i++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.dataset.idx = i;
+          cell.ondragover = handleDragOver;
+          cell.ondragleave = clearPreview;
+          cell.ondrop = handleDrop;
+          grid.appendChild(cell);
+        }
+      }
+
+      function getTargetIndices(startIdx) {
+        const r0 = Math.floor(startIdx / currentSize);
+        const c0 = startIdx % currentSize;
+        const shape = SHAPES[draggedType];
+        const indices = [];
+
+        for (let [dr, dc] of shape.cells) {
+          const r = r0 + dr;
+          const c = c0 + dc;
+          if (r >= currentSize || c >= currentSize || r < 0 || c < 0)
+            return null;
+          const idx = r * currentSize + c;
+          if (
+            document
+              .querySelector(`[data-idx="${idx}"]`)
+              .classList.contains("occupied")
+          )
+            return null;
+          indices.push(idx);
+        }
+        return indices;
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        clearPreview();
+        const indices = getTargetIndices(parseInt(this.dataset.idx));
+        if (indices) {
+          indices.forEach((idx) => {
+            const el = document.querySelector(`[data-idx="${idx}"]`);
+            el.style.background = SHAPES[draggedType].color;
+            el.classList.add("preview");
+          });
+          lastPreviewIndices = indices;
+        }
+      }
+
+      function clearPreview() {
+        lastPreviewIndices.forEach((idx) => {
+          const el = document.querySelector(`[data-idx="${idx}"]`);
+          if (!el.classList.contains("occupied")) {
+            el.style.background = "";
+            el.classList.remove("preview");
+          }
+        });
+        lastPreviewIndices = [];
+      }
+
+      function handleDrop(e) {
+        e.preventDefault();
+        const indices = getTargetIndices(parseInt(this.dataset.idx));
+        if (indices) {
+          indices.forEach((idx) => {
+            const el = document.querySelector(`[data-idx="${idx}"]`);
+            el.style.background = SHAPES[draggedType].color;
+            el.classList.add("occupied");
+            el.classList.remove("preview");
+          });
+          SHAPES[draggedType].count--;
+          document.getElementById(`count-${draggedType}`).innerText =
+            SHAPES[draggedType].count;
+          if (SHAPES[draggedType].count <= 0)
+            document.getElementById(`preview-${draggedType}`).style.opacity =
+              "0.2";
+        }
+        clearPreview();
+      }
+
+      function changeSize(s) {
+        currentSize = s;
+        document
+          .querySelectorAll(".btn-group button")
+          .forEach((b) => b.classList.remove("active"));
+        event.target.classList.add("active");
+        renderGrid();
+      }
+
+      initInventory();
+      renderGrid();
+    </script>
+  </body>
+</html>
