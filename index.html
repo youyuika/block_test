@@ -2,11 +2,11 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
-    <title>四格方塊實驗</title>
+    <title>方格實驗</title>
     <style>
       :root {
         --bg: #f0f2f5;
-        --cell-size: 40px;
+        --cell-size: 35px; /* 稍微縮小以適應大棋盤 */
         --color-I: #00bcd4;
         --color-T: #9c27b0;
         --color-Z: #f44336;
@@ -19,59 +19,62 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 20px;
+        padding: 10px;
       }
       .layout {
         display: flex;
-        gap: 50px;
-        margin-top: 20px;
+        gap: 30px;
+        margin-top: 15px;
         align-items: flex-start;
+        flex-wrap: wrap;
+        justify-content: center;
       }
 
-      /* 棋盤樣式 */
       .grid {
         display: grid;
         background: #ccc;
         gap: 1px;
         border: 2px solid #333;
         padding: 1px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
       }
       .cell {
         width: var(--cell-size);
         height: var(--cell-size);
         background: white;
-        pointer-events: auto;
+        transition: background 0.1s;
       }
       .cell.occupied {
         border: none;
       }
-
-      /* 預覽陰影樣式 */
       .cell.preview {
         opacity: 0.5 !important;
       }
 
       .toolbar {
         background: white;
-        padding: 25px;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        min-width: 250px;
       }
       .shape-slot {
-        margin-bottom: 30px;
+        margin-bottom: 20px;
         display: flex;
         align-items: center;
-        gap: 20px;
+        gap: 15px;
       }
       .shape-preview {
         display: grid;
         gap: 1px;
         cursor: grab;
-        padding: 0;
+        padding: 2px;
         border: 2px solid transparent;
+        background: #f9f9f9;
       }
       .shape-preview:hover {
-        border-color: #ddd;
+        border-color: #4a90e2;
+        background: #fff;
       }
       .mini-cell {
         width: var(--cell-size);
@@ -79,48 +82,78 @@
       }
 
       .info-panel {
-        min-width: 60px;
+        min-width: 50px;
         text-align: center;
       }
       .count-badge {
         font-weight: bold;
-        font-size: 1.5em;
+        font-size: 1.4em;
         display: block;
+        color: #333;
       }
 
       .btn-group {
-        margin-bottom: 20px;
+        margin-bottom: 15px;
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        justify-content: center;
       }
       button {
-        padding: 10px 20px;
+        padding: 8px 12px;
         cursor: pointer;
-        border-radius: 6px;
+        border-radius: 4px;
         border: 1px solid #ddd;
         background: white;
+        font-weight: 500;
       }
       button.active {
-        background: #333;
+        background: #4a90e2;
         color: white;
+        border-color: #2a6dbd;
+      }
+      .reset-btn {
+        background: #ff5252;
+        color: white;
+        border: none;
+        margin-left: 10px;
+      }
+
+      .tip {
+        font-size: 0.85em;
+        color: #666;
+        line-height: 1.6;
+        margin-top: 10px;
+        background: #fffde7;
+        padding: 10px;
+        border-radius: 5px;
       }
     </style>
   </head>
   <body>
-    <h1>四格方塊實驗</h1>
+    <h2 style="margin-bottom: 10px">方格實驗</h2>
 
     <div class="btn-group">
-      <button onclick="changeSize(6)">6 x 6</button>
-      <button onclick="changeSize(7)">7 x 7</button>
-      <button onclick="changeSize(8)">8 x 8</button>
-      <button onclick="changeSize(9)" class="active">9 x 9</button>
-      <button onclick="location.reload()" style="color: red; margin-left: 20px">
-        重設
+      <button onclick="changeSize(6)">6x6</button>
+      <button onclick="changeSize(7)">7x7</button>
+      <button onclick="changeSize(8)">8x8</button>
+      <button onclick="changeSize(9)" class="active">9x9</button>
+      <button onclick="changeSize(10)">10x10</button>
+      <button onclick="changeSize(11)">11x11</button>
+      <button class="reset-btn" onclick="location.reload()">
+        重置棋盤與數量
       </button>
     </div>
 
     <div class="layout">
       <div class="toolbar">
         <div id="inventory"></div>
-        <p style="font-size: 0.8em; color: #888">* 點擊旋轉 / 拖移放置</p>
+        <div class="tip">
+          <b>操作指南：</b><br />
+          🖱️ <b>左鍵點擊：</b> 順時針旋轉<br />
+          🖱️ <b>右鍵點擊：</b> 水平翻轉 (Mirror)<br />
+          👆 <b>拖移圖案：</b> 放置到棋盤
+        </div>
       </div>
       <div id="grid" class="grid"></div>
     </div>
@@ -176,7 +209,7 @@
             [0, 2],
             [1, 2],
           ],
-        },
+        }, // 初始已水平翻轉
       };
 
       let currentSize = 9;
@@ -191,9 +224,11 @@
           const div = document.createElement("div");
           div.className = "shape-slot";
           div.innerHTML = `
-                    <div class="info-panel"><span class="count-badge" id="count-${type}">${item.count}</span></div>
+                    <div class="info-panel"><span class="count-badge" id="count-${type}">${item.count}</span><small>剩餘</small></div>
                     <div id="preview-${type}" class="shape-preview" draggable="true" 
-                         onclick="rotateShape('${type}')" ondragstart="handleDragStart(event, '${type}')">
+                         onclick="rotateShape('${type}')" 
+                         oncontextmenu="flipShape(event, '${type}')"
+                         ondragstart="handleDragStart(event, '${type}')">
                          ${renderShape(type)}
                     </div>
                 `;
@@ -217,14 +252,26 @@
 
       function rotateShape(type) {
         SHAPES[type].cells = SHAPES[type].cells.map((c) => [c[1], -c[0]]);
+        normalize(type);
+        document.getElementById(`preview-${type}`).innerHTML =
+          renderShape(type);
+      }
+
+      function flipShape(e, type) {
+        e.preventDefault();
+        SHAPES[type].cells = SHAPES[type].cells.map((c) => [c[0], -c[1]]);
+        normalize(type);
+        document.getElementById(`preview-${type}`).innerHTML =
+          renderShape(type);
+      }
+
+      function normalize(type) {
         const minR = Math.min(...SHAPES[type].cells.map((c) => c[0]));
         const minC = Math.min(...SHAPES[type].cells.map((c) => c[1]));
         SHAPES[type].cells = SHAPES[type].cells.map((c) => [
           c[0] - minR,
           c[1] - minC,
         ]);
-        document.getElementById(`preview-${type}`).innerHTML =
-          renderShape(type);
       }
 
       function handleDragStart(e, type) {
@@ -233,7 +280,6 @@
           return;
         }
         draggedType = type;
-        // 設定透明預覽圖（選配，可自訂）
         const img = new Image();
         img.src =
           "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -260,7 +306,6 @@
         const c0 = startIdx % currentSize;
         const shape = SHAPES[draggedType];
         const indices = [];
-
         for (let [dr, dc] of shape.cells) {
           const r = r0 + dr;
           const c = c0 + dc;
@@ -328,7 +373,10 @@
         document
           .querySelectorAll(".btn-group button")
           .forEach((b) => b.classList.remove("active"));
-        event.target.classList.add("active");
+        const target = Array.from(
+          document.querySelectorAll(".btn-group button"),
+        ).find((b) => b.innerText.includes(s));
+        if (target) target.classList.add("active");
         renderGrid();
       }
 
